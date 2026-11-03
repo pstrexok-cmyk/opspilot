@@ -1,0 +1,21 @@
+import os
+
+from sqlalchemy import create_engine, text
+
+
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    "postgresql+psycopg://opspilot:local-dev-only@127.0.0.1:5433/opspilot",
+)
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+psycopg://", 1)
+elif DATABASE_URL.startswith("postgresql://"):
+    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+psycopg://", 1)
+engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+
+
+def check_database_connection() -> None:
+    """Run a tiny query so the health endpoint checks the real database connection."""
+    with engine.connect() as connection:
+        connection.execute(text("SELECT 1"))
+
