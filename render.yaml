@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: opspilot
+    runtime: docker
+    region: frankfurt
+    plan: free
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: OPSPILOT_PUBLIC_DEMO
+        value: "true"
