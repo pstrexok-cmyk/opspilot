@@ -79,9 +79,15 @@ type Preview = {
   preview_rows: Record<string, string | number | null>[]
   errors: ImportIssue[]
 }
+type UploadAnalysis = {
+  success: boolean; filename: string; total_rows: number; valid_rows: number
+  date_from: string | null; date_to: string | null; summary?: Metrics['summary']
+  signal_count?: number; recommendations?: { key: string; evidence: number }[]
+  errors?: ImportIssue[]
+}
 
-type PageId = 'overview' | 'queues' | 'signals' | 'reports' | 'datasets' | 'guide'
-const pageIds: PageId[] = ['overview', 'queues', 'signals', 'reports', 'datasets', 'guide']
+type PageId = 'overview' | 'queues' | 'signals' | 'recommendations' | 'reports' | 'datasets' | 'guide'
+const pageIds: PageId[] = ['overview', 'queues', 'signals', 'recommendations', 'reports', 'datasets', 'guide']
 function pageFromHash(): PageId {
   const page = window.location.hash.slice(1) as PageId
   return pageIds.includes(page) ? page : 'overview'
@@ -182,6 +188,7 @@ function App() {
   const [preview, setPreview] = useState<Preview | null>(null)
   const [uploadError, setUploadError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [uploadAnalysis, setUploadAnalysis] = useState<UploadAnalysis | null>(null)
 
   useEffect(() => {
     localStorage.setItem('opspilot-language', language)
@@ -300,6 +307,22 @@ function App() {
     }
   }
 
+  async function analyzeUploadedFile() {
+    if (!file) return
+    setBusy(true)
+    setUploadError('')
+    setUploadAnalysis(null)
+    const form = new FormData()
+    form.append('file', file)
+    try {
+      setUploadAnalysis(await request<UploadAnalysis>('/api/v1/datasets/analyze-upload', { method: 'POST', body: form }))
+    } catch (error) {
+      setUploadError((error as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function generateReport() {
     if (!datasetId || !applied.from || !applied.to) return
     setReportBusy(true)
@@ -349,7 +372,7 @@ function App() {
           <div className="sidebar-label">{t('workspaceNav')}</div>
           <nav className="side-nav" aria-label={t('workspaceNav')}>
             {pageIds.map((page, index) => <a key={page} href={`#${page}`} className={activePage === page ? 'active' : ''} aria-current={activePage === page ? 'page' : undefined}>
-              <span className="nav-icon" aria-hidden="true">{['◫', '⌁', '▤', '▦', '?'][index]}</span>{t(`page_${page}`)}
+              <span className="nav-icon" aria-hidden="true">{['◫', '⌁', '▤', '✦', '▦', '▧', '?'][index]}</span>{t(`page_${page}`)}
             </a>)}
           </nav>
           <div className="sidebar-note"><span className="workspace-dot" />{t('synthetic')}</div>
@@ -450,6 +473,17 @@ function App() {
           </article>)}</div>}
         </section>}
 
+        {activePage === 'recommendations' && <section className="recommendation-list page-panel">
+          <div className="section-heading"><div><h2>{t('recommendationTitle')}</h2><p>{t('recommendationIntro')}</p></div></div>
+          {!summary ? <div className="no-signals">{t('loadingMetrics')}</div> : <div className="signal-list">
+            {summary.cases_received > summary.cases_resolved && <article className="signal-card"><span className="signal-severity high">{t('attentionLabel')}</span><div className="signal-main"><strong>{t('recBacklogTitle')}</strong><span>{t('recBacklogEvidence').replace('{n}', number.format(summary.cases_received - summary.cases_resolved))}</span><p>{t('recBacklogAction')}</p></div></article>}
+            {summary.sla_breaches > 0 && <article className="signal-card"><span className="signal-severity">{t('reviewLabel')}</span><div className="signal-main"><strong>{t('recSlaTitle')}</strong><span>{t('recSlaEvidence').replace('{n}', number.format(summary.sla_breaches)).replace('{pct}', percent(summary.sla_breach_rate_pct, language))}</span><p>{t('recSlaAction')}</p></div></article>}
+            {summary.reopened_cases > 0 && <article className="signal-card"><span className="signal-severity">{t('reviewLabel')}</span><div className="signal-main"><strong>{t('recReopenedTitle')}</strong><span>{t('recReopenedEvidence').replace('{n}', number.format(summary.reopened_cases))}</span><p>{t('recReopenedAction')}</p></div></article>}
+            {summary.cases_received <= summary.cases_resolved && summary.sla_breaches === 0 && summary.reopened_cases === 0 && <div className="no-signals">{t('noRecommendations')}</div>}
+            <p className="data-boundary">{t('recommendationCaveat')}</p>
+          </div>}
+        </section>}
+
         {activePage === 'reports' && <section className="report-section page-panel">
           <div className="section-heading"><div><h2>{t('reportTitle')}</h2><p>{t('reportDescription')}</p></div><button className="primary-button" type="button" disabled={reportBusy || !metrics?.series.length} onClick={generateReport}>{reportBusy ? t('creatingReport') : t('createReport')}</button></div>
           {reportError && <div className="alert error-alert">{appError(reportError, language)}</div>}
@@ -461,9 +495,27 @@ function App() {
           <section className="dataset-list page-panel">
             <div className="section-heading"><div><h2>{t('datasetCatalog')}</h2><p>{t('datasetCatalogDescription')}</p></div><span className="signal-count">{datasets.length} {t('datasetsCount')}</span></div>
             <div className="dataset-table-wrap"><table><thead><tr><th>{t('dataset')}</th><th>{t('source')}</th><th>{t('rowsLabel')}</th><th>{t('coverage')}</th></tr></thead><tbody>{datasets.map((item) => <tr key={item.id}><td><strong>{datasetLabel(item, language)}</strong></td><td>{item.source_filename}</td><td>{number.format(item.row_count)}</td><td>{item.date_from ? shortDate(item.date_from, language) : '—'} — {item.date_to ? shortDate(item.date_to, language) : '—'}</td></tr>)}</tbody></table></div>
-            {import.meta.env.VITE_PUBLIC_DEMO === 'true' && <p className="data-boundary">{t('publicUploadDisabled')}</p>}
+            {import.meta.env.VITE_PUBLIC_DEMO === 'true' && <p className="data-boundary">{t('publicUploadNote')}</p>}
           </section>
-          {import.meta.env.VITE_PUBLIC_DEMO === 'true' ? null : <details open className="upload-panel">
+          {import.meta.env.VITE_PUBLIC_DEMO === 'true' ? <details open className="upload-panel">
+          <summary><span><strong>{t('analyzeCsv')}</strong><small>{t('analyzeCsvHint')}</small></span><span className="summary-plus">+</span></summary>
+          <div className="upload-content">
+            <p>{t('uploadDescription')} {t('uploadPrivacyNote')}</p>
+            <a className="text-link" href="/api/v1/sample-data" download>{t('downloadTemplate')}</a>
+            <div className="upload-actions"><input type="file" accept=".csv,text/csv" onChange={(event) => { setFile(event.target.files?.[0] ?? null); setUploadAnalysis(null); setUploadError('') }} />
+              <button className="secondary-button" type="button" disabled={!file || busy} onClick={analyzeUploadedFile}>{busy ? t('analyzingCsv') : t('analyzeCsv')}</button>
+            </div>
+            {uploadError && <div className="alert error-alert">{appError(uploadError, language)}</div>}
+            {uploadAnalysis && <div className={`preview-result ${uploadAnalysis.success ? 'preview-ok' : 'preview-bad'}`}>
+              <strong>{uploadAnalysis.success ? t('analysisComplete') : t('invalidFile')}</strong>
+              <p>{uploadAnalysis.valid_rows} / {uploadAnalysis.total_rows} {t('rows')} · {uploadAnalysis.date_from ? shortDate(uploadAnalysis.date_from, language) : '—'} — {uploadAnalysis.date_to ? shortDate(uploadAnalysis.date_to, language) : '—'}</p>
+              {uploadAnalysis.errors?.length ? <ul className="issue-list">{uploadAnalysis.errors.map((issue, index) => <li key={`${issue.code}-${index}`}>{issue.row ? `${language === 'en' ? 'Row' : 'Строка'} ${issue.row}: ` : ''}{issueMessage(issue, language)}</li>)}</ul> : uploadAnalysis.summary && <>
+                <div className="upload-kpi-grid"><span>{t('incoming')} <strong>{number.format(uploadAnalysis.summary.cases_received)}</strong></span><span>{t('resolved')} <strong>{number.format(uploadAnalysis.summary.cases_resolved)}</strong></span><span>{t('waiting')} <strong>{number.format(uploadAnalysis.summary.backlog_end)}</strong></span><span>{t('sla')} <strong>{percent(uploadAnalysis.summary.sla_breach_rate_pct, language)}</strong></span></div>
+                <p>{t('uploadSignals').replace('{n}', String(uploadAnalysis.signal_count ?? 0))} · {t('uploadRecommendationCount').replace('{n}', String(uploadAnalysis.recommendations?.length ?? 0))}</p>
+                <small>{t('uploadNotSaved')}</small>
+              </>}
+            </div>}
+          </div></details> : <details open className="upload-panel">
           <summary><span><strong>{datasets.length ? t('uploadOther') : t('upload')}</strong><small>{t('uploadHint')}</small></span><span className="summary-plus">+</span></summary>
           <div className="upload-content">
             <p>{t('uploadDescription')}</p>
