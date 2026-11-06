@@ -85,6 +85,8 @@ type UploadAnalysis = {
   signal_count?: number; recommendations?: { key: string; evidence: number }[]
   errors?: ImportIssue[]
 }
+type AIStatus = { enabled: boolean; configured: boolean; monthly_limit: number; used: number; remaining: number }
+type AIAnalysis = { analysis: string; monthly_limit: number; used: number; remaining: number }
 
 type PageId = 'overview' | 'queues' | 'signals' | 'recommendations' | 'reports' | 'datasets' | 'guide'
 const pageIds: PageId[] = ['overview', 'queues', 'signals', 'recommendations', 'reports', 'datasets', 'guide']
@@ -132,6 +134,11 @@ function appError(message: string, language: Language) {
     'Dataset not found.': 'Набор данных не найден.',
     'Database is unavailable': 'База данных недоступна.',
     'CSV validation failed; no rows were imported.': 'CSV не прошёл проверку; данные не были импортированы.',
+    'AI analysis is not configured yet.': translate(language, 'aiNotConfiguredError'),
+    'The monthly AI demo limit has been reached.': translate(language, 'aiLimitError'),
+    'The AI provider could not complete the analysis.': translate(language, 'aiProviderError'),
+    'The AI provider returned an empty analysis.': translate(language, 'aiProviderError'),
+    'The AI provider is temporarily rate-limited.': translate(language, 'aiRateLimitError'),
     'The request failed. Check that the API and database are running.': translate(language, 'apiUnavailable'),
   }
   return known[message] ?? message
@@ -189,6 +196,10 @@ function App() {
   const [uploadError, setUploadError] = useState('')
   const [busy, setBusy] = useState(false)
   const [uploadAnalysis, setUploadAnalysis] = useState<UploadAnalysis | null>(null)
+  const [aiStatus, setAiStatus] = useState<AIStatus | null>(null)
+  const [aiAnalysis, setAiAnalysis] = useState<AIAnalysis | null>(null)
+  const [aiBusy, setAiBusy] = useState(false)
+  const [aiError, setAiError] = useState('')
 
   useEffect(() => {
     localStorage.setItem('opspilot-language', language)
@@ -209,6 +220,12 @@ function App() {
         else setLoading(false)
       })
       .catch((error: Error) => { setPageError(error.message); setLoading(false) })
+  }, [])
+
+  useEffect(() => {
+    request<AIStatus>('/api/v1/ai/status')
+      .then(setAiStatus)
+      .catch(() => setAiStatus(null))
   }, [])
 
   useEffect(() => {
@@ -312,6 +329,8 @@ function App() {
     setBusy(true)
     setUploadError('')
     setUploadAnalysis(null)
+    setAiAnalysis(null)
+    setAiError('')
     const form = new FormData()
     form.append('file', file)
     try {
@@ -320,6 +339,33 @@ function App() {
       setUploadError((error as Error).message)
     } finally {
       setBusy(false)
+    }
+  }
+
+  async function generateUploadAIAnalysis() {
+    if (!uploadAnalysis?.summary || !uploadAnalysis.date_from || !uploadAnalysis.date_to || !aiStatus?.enabled) return
+    setAiBusy(true)
+    setAiError('')
+    setAiAnalysis(null)
+    try {
+      const result = await request<AIAnalysis>('/api/v1/ai/analyze-upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          period_from: uploadAnalysis.date_from,
+          period_to: uploadAnalysis.date_to,
+          summary: uploadAnalysis.summary,
+          recommendations: uploadAnalysis.recommendations ?? [],
+          language,
+        }),
+      })
+      setAiAnalysis(result)
+      setAiStatus((current) => current ? { ...current, used: result.used, remaining: result.remaining, enabled: result.remaining > 0 } : current)
+    } catch (error) {
+      setAiError(appError((error as Error).message, language))
+      request<AIStatus>('/api/v1/ai/status').then(setAiStatus).catch(() => undefined)
+    } finally {
+      setAiBusy(false)
     }
   }
 
@@ -521,6 +567,17 @@ function App() {
                   return <article className="signal-card" key={item.key}><div className="signal-main"><strong>{t(definition.title)}</strong><span>{definition.evidence}</span><p>{t(definition.action)}</p></div></article>
                 })}</div>}
                 <div className="upload-not-saved"><span aria-hidden="true">i</span><p>{t('uploadNotSaved')}</p></div>
+                <section className="upload-ai" aria-live="polite">
+                  <div className="upload-ai-heading"><div><strong>{t('aiReportTitle')}</strong><p>{t('aiReportDescription')}</p></div>
+                    <button className="primary-button" type="button" disabled={!aiStatus?.enabled || aiBusy} onClick={generateUploadAIAnalysis}>{aiBusy ? t('aiWorking') : t('aiButton')}</button>
+                  </div>
+                  {!aiStatus ? <p className="ai-status-note">{t('aiChecking')}</p>
+                    : !aiStatus.configured ? <p className="ai-status-note">{t('aiNotConfigured')}</p>
+                      : aiStatus.remaining === 0 ? <p className="ai-status-note">{t('aiQuotaReached')}</p>
+                        : <p className="ai-status-note">{t('aiQuotaRemaining').replace('{n}', number.format(aiStatus.remaining))}</p>}
+                  {aiError && <div className="alert error-alert">{aiError}</div>}
+                  {aiAnalysis && <article className="ai-result"><strong>{t('aiResultTitle')}</strong><div>{aiAnalysis.analysis}</div></article>}
+                </section>
               </>}
             </div>}
           </div></details> : <details open className="upload-panel">
