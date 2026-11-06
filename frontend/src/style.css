@@ -159,6 +159,9 @@ table { width: 100%; border-collapse: collapse; color: #52616c; font-size: 10px;
 th, td { padding: 8px 9px; border-bottom: 1px solid #e7eeeb; text-align: left; white-space: nowrap; }
 th { color: #7b8a94; font-weight: 650; }
 .import-button { margin-top: 11px; }
+.upload-kpi-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 12px 0; }
+.upload-kpi-grid span { display: flex; justify-content: space-between; gap: 8px; padding: 9px 10px; color: #75838d; background: #fff; border: 1px solid #e7eeeb; border-radius: 7px; font-size: 10px; }
+.upload-kpi-grid strong { color: #315f5b; }
 .alert { margin: 15px 0; padding: 12px 14px; border-radius: 9px; font-size: 12px; }
 .error-alert { color: #8f4c43; background: #fff0ee; border: 1px solid #f1d8d4; }
 .loading-card, .empty-state { display: flex; align-items: center; gap: 10px; margin: 18px 0; padding: 20px; color: #6b7b86; background: #fff; border: 1px solid var(--line); border-radius: 11px; font-size: 12px; }
