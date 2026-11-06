@@ -4,8 +4,14 @@
 
 - **Render Free** runs the Docker app and serves the React site and FastAPI API from the same address.
 - **Neon Free** stores the seeded fictional Northstar dataset and remains available without an expiry date.
-- No LLM key is needed: report text comes from a deterministic template.
+- The regular management report uses a deterministic template. Optional AI interpretation stays disabled until its API key is added.
 - The public demo permits stateless CSV analysis but disables persistent imports and does not save generated reports. Uploaded files are not added to the shared demo database.
+
+## Optional AI interpretation
+
+The public CSV analyzer can use OpenAI's Responses API to write a short management interpretation. The browser sends only aggregate KPI values and rule keys to OpsPilot's backend; the raw CSV is not sent to OpenAI. The feature stays disabled until `OPENAI_API_KEY` is added to the Render service's protected environment settings.
+
+The public demo has a shared application cap of 500 AI requests per UTC month, stored in PostgreSQL, and each response is limited to 600 output tokens. Also set a separate **$1 monthly hard spend limit** with enforcement enabled in the OpenAI API project's Limits settings; configure a $0.50 alert. The application request cap and provider spend cap protect different things, so use both. Never put the API key in GitHub, frontend code, or chat.
 
 The trade-off is that a free Render service sleeps after 15 minutes without traffic. The first visit after sleep can take about a minute. Render's free PostgreSQL service is not selected because its free databases expire; Neon is a separate persistent free database option. Free quotas and provider terms can change.
 
@@ -29,4 +35,4 @@ From the project root, run `docker build -t opspilot .`. The hosted image defaul
 
 ## Limitations
 
-This is a portfolio demo with fictional aggregate data, not a production banking system. It has no login, user isolation, real bank connection, or LLM integration. CSV uploads are sent to the hosting service for temporary analysis; do not upload real customer, account, or other confidential data. Add authentication and tenant-level isolation before enabling persistent imports.
+This is a portfolio demo with fictional aggregate data, not a production banking system. It has no login, user isolation, or real bank connection. CSV uploads are sent to the hosting service for temporary analysis; do not upload real customer, account, or other confidential data. Add authentication and tenant-level isolation before enabling persistent imports.
