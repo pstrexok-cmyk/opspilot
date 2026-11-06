@@ -17,11 +17,11 @@ See [`DEPLOYMENT.md`](DEPLOYMENT.md) for the proposed free hosting setup and pub
 7. In a second terminal, open `frontend/`, run `npm ci`, then `npm run dev`.
 8. Open [http://127.0.0.1:5173/](http://127.0.0.1:5173/) for the OpsPilot dashboard.
 
-The dashboard starts with the synthetic Northstar sample. Choose a queue and dates, then click **Show results** (`Показать`) to update KPI cards and weekly charts. The **How should I read these metrics?** (`Как читать показатели?`) section explains the formulas. To try another file, open **Upload another CSV** (`Загрузить другой CSV`), download the sample template, choose a CSV, preview its validation result, and import it only after it passes.
+The dashboard starts with the synthetic Northstar sample. Choose a queue and dates, then click **Show results** (`Показать`) to update KPI cards and weekly charts. **Recommendations** turns selected KPI patterns into rule-based operational questions. **Metric guide** explains the formulas. On the public demo, **Data** can analyze a CSV temporarily without adding it to the shared database; local mode also supports validated dataset import.
 
 The interface opens in English. Use the **EN / RU** control in the top bar to switch the full dashboard, charts, anomaly explanations, CSV guidance, and management report to Russian. The choice is remembered in the browser.
 
-For developer/API inspection, open `http://127.0.0.1:8000/docs`. `POST /api/v1/datasets/preview` checks a file without saving it. `POST /api/v1/datasets` imports a validated CSV; `GET /api/v1/datasets` lists saved datasets; and `GET /api/v1/datasets/{id}/metrics` returns the KPI summary and daily series. The metrics endpoint accepts `from`, `to`, and `queue` filters.
+For developer/API inspection, open `http://127.0.0.1:8000/docs`. `POST /api/v1/datasets/analyze-upload` validates and analyzes a CSV in memory without saving it. In local mode, `POST /api/v1/datasets/preview` checks a file and `POST /api/v1/datasets` imports it; `GET /api/v1/datasets` lists saved datasets, and `GET /api/v1/datasets/{id}/metrics` returns the KPI summary and daily series.
 
 The SLA breach percentage is `SLA breaches / resolved cases`. Throughput-to-intake is `resolved cases / incoming cases`; it compares flows, not the same cohort of cases. Average resolution time is weighted by resolved volume. The daily CSAT average is currently unweighted because the sample does not include survey counts.
 
