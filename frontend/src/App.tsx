@@ -80,6 +80,13 @@ type Preview = {
   errors: ImportIssue[]
 }
 
+type PageId = 'overview' | 'queues' | 'signals' | 'reports' | 'datasets' | 'guide'
+const pageIds: PageId[] = ['overview', 'queues', 'signals', 'reports', 'datasets', 'guide']
+function pageFromHash(): PageId {
+  const page = window.location.hash.slice(1) as PageId
+  return pageIds.includes(page) ? page : 'overview'
+}
+
 const queueLabels: Record<Language, Record<string, string>> = {
   en: { kyc_review: 'Customer verification · KYC', card_disputes: 'Card disputes', payments_support: 'Payment support' },
   ru: { kyc_review: 'Проверка клиентов · KYC', card_disputes: 'Споры по картам', payments_support: 'Поддержка платежей' },
@@ -154,6 +161,7 @@ function weeklyTotals(points: MetricPoint[]) {
 
 function App() {
   const [language, setLanguage] = useState<Language>(() => localStorage.getItem('opspilot-language') === 'ru' ? 'ru' : 'en')
+  const [activePage, setActivePage] = useState<PageId>(pageFromHash)
   const t = (key: string) => translate(language, key)
   const number = numberFormat(language)
   const [datasets, setDatasets] = useState<Dataset[]>([])
@@ -179,6 +187,12 @@ function App() {
     localStorage.setItem('opspilot-language', language)
     document.documentElement.lang = language
   }, [language])
+
+  useEffect(() => {
+    const syncPage = () => setActivePage(pageFromHash())
+    window.addEventListener('hashchange', syncPage)
+    return () => window.removeEventListener('hashchange', syncPage)
+  }, [])
 
   useEffect(() => {
     request<Dataset[]>('/api/v1/datasets')
@@ -306,6 +320,18 @@ function App() {
 
   const summary = metrics?.summary
   const flowGap = summary ? summary.cases_received - summary.cases_resolved : 0
+  const queueSummary = useMemo(() => {
+    const grouped = new Map<string, { queue: string; received: number; resolved: number; breaches: number; backlog: number; lastDate: string }>()
+    for (const point of metrics?.series ?? []) {
+      const current = grouped.get(point.queue) ?? { queue: point.queue, received: 0, resolved: 0, breaches: 0, backlog: 0, lastDate: '' }
+      current.received += point.cases_received
+      current.resolved += point.cases_resolved
+      current.breaches += point.sla_breaches
+      if (point.date >= current.lastDate) { current.lastDate = point.date; current.backlog = point.backlog_end }
+      grouped.set(point.queue, current)
+    }
+    return [...grouped.values()].sort((a, b) => b.received - a.received)
+  }, [metrics])
 
   return (
     <div className="app-shell">
@@ -318,16 +344,33 @@ function App() {
         </div>
       </header>
 
-      <main className="content" id="overview">
+      <div className="workspace-layout">
+        <aside className="sidebar">
+          <div className="sidebar-label">{t('workspaceNav')}</div>
+          <nav className="side-nav" aria-label={t('workspaceNav')}>
+            {pageIds.map((page, index) => <a key={page} href={`#${page}`} className={activePage === page ? 'active' : ''} aria-current={activePage === page ? 'page' : undefined}>
+              <span className="nav-icon" aria-hidden="true">{['◫', '⌁', '▤', '▦', '?'][index]}</span>{t(`page_${page}`)}
+            </a>)}
+          </nav>
+          <div className="sidebar-note"><span className="workspace-dot" />{t('synthetic')}</div>
+        </aside>
+
+      <main className="content" id={activePage}>
         <div className="page-heading">
           <div>
-            <div className="eyebrow">{t('eyebrow')}</div>
-            <h1>{t('title')}</h1>
-            <p className="subtitle">{t('subtitle')}</p>
+            <div className="eyebrow">{t('eyebrow')} <span>·</span> {t(`page_${activePage}`)}</div>
+            <h1>{t(`page_${activePage}`)}</h1>
+            <p className="subtitle">{t(`pageDescription_${activePage}`)}</p>
           </div>
           <div className="demo-badge"><span /> {t('synthetic')}</div>
         </div>
 
+        {pageError && <div className="alert error-alert">{appError(pageError, language)}</div>}
+        {loading && <div className="loading-card"><span className="spinner" /> {t('loadingMetrics')}</div>}
+        {!loading && !datasets.length && <div className="empty-state"><h2>{t('noDatasets')}</h2><p>{t('importToStart')}</p></div>}
+
+        {(activePage === 'overview' || activePage === 'queues') && <>
+        {activePage === 'overview' && <>
         <section className="start-here" aria-label={t('guideTitle')}>
           <div className="start-here-title"><span className="start-here-mark">1</span><div><strong>{t('guideTitle')}</strong><p>{t('guideDescription')}</p></div></div>
           <div className="guide-steps">
@@ -336,10 +379,7 @@ function App() {
             <div><b>{t('checkBacklog')}</b><span>{t('checkBacklogText')}</span></div>
           </div>
         </section>
-
-        {pageError && <div className="alert error-alert">{appError(pageError, language)}</div>}
-        {loading && <div className="loading-card"><span className="spinner" /> {t('loadingMetrics')}</div>}
-        {!loading && !datasets.length && <div className="empty-state"><h2>{t('noDatasets')}</h2><p>{t('importToStart')}</p></div>}
+        </>}
 
         {summary && !loading && <>
           <form className="filter-bar" onSubmit={applyFilters}>
@@ -360,6 +400,7 @@ function App() {
             <button className="primary-button filter-button" type="submit">{t('show')}</button>
           </form>
 
+          {activePage === 'overview' && <>
           <div className="dataset-caption">
             <span>{number.format(metrics.series.length)} {t('dailyRecords')}</span>
             <span>·</span>
@@ -376,16 +417,6 @@ function App() {
             <KpiCard title={t('resolutionTime')} value={summary.weighted_avg_resolution_hours === null ? t('noData') : `${decimal(summary.weighted_avg_resolution_hours, language)} ${language === 'en' ? 'h' : 'ч'}`} note={t('weightedResolved')} />
           </section>
 
-          <details className="metric-guide">
-            <summary>{t('readMetrics')}</summary>
-            <div className="metric-definitions">
-              <p><strong>{t('waiting')}</strong> — {t('backlogDefinition')}</p>
-              <p><strong>SLA</strong> — {t('slaDefinition')}</p>
-              <p><strong>{t('processingPace')}</strong> — {t('paceDefinition')}</p>
-              <p><strong>{t('resolutionTime')}</strong> {t('timeDefinition')}</p>
-            </div>
-          </details>
-
           <section className="interpretation" aria-live="polite">
             <div className="interpretation-icon">i</div>
             <div>
@@ -399,25 +430,40 @@ function App() {
               <TrendCharts data={weekly} language={language} />
             </Suspense>
           </section>
-
-          <section className="signals-section">
-            <div className="section-heading"><div><h2>{t('signals')}</h2><p>{t('ruleDescription')}</p></div><span className="signal-count">{anomalyLoading ? t('checking') : `${anomalies.length} ${signalWord(anomalies.length, language)}`}</span></div>
-            {!anomalyLoading && anomalies.length === 0 && <div className="no-signals">{t('noSignals')}</div>}
-            {anomalies.length > 0 && <div className="signal-list">{anomalies.map((anomaly) => <article className="signal-card" key={`${anomaly.date}-${anomaly.queue}`}>
-              <div className={`signal-severity ${anomaly.severity === 'high' ? 'high' : ''}`}>{anomaly.severity === 'high' ? t('strongSpike') : t('spike')}</div>
-              <div className="signal-main"><strong>{shortDate(anomaly.date, language)} · {queueLabels[language][anomaly.queue] ?? anomaly.queue}</strong><span>{number.format(anomaly.actual_value)} {t('intake')} · {t('normalThreshold')} {number.format(anomaly.threshold_value)}</span><p>{language === 'ru' ? anomaly.explanation : `Intake was ${number.format(anomaly.actual_value)} cases — above the threshold of ${number.format(anomaly.threshold_value)} (1.5 × the median of ${number.format(anomaly.baseline_median)} across ${anomaly.baseline_days} observations in the previous 28 calendar days). This flags unusual volume; it does not establish the cause.`}</p></div>
-            </article>)}</div>}
-          </section>
-
-          <section className="report-section">
-            <div className="section-heading"><div><h2>{t('reportTitle')}</h2><p>{t('reportDescription')}</p></div><button className="primary-button" type="button" disabled={reportBusy || !metrics.series.length} onClick={generateReport}>{reportBusy ? t('creatingReport') : t('createReport')}</button></div>
-            {reportError && <div className="alert error-alert">{appError(reportError, language)}</div>}
-            {report && <article className="report-card"><div className="report-meta">{t('templateReport')} · {shortDate(report.period_from, language)} — {shortDate(report.period_to, language)} · {report.persisted ? t('savedIn') : t('temporaryReport')}</div><p>{report.narrative}</p><small>{t('reportNoAi')}</small></article>}
-          </section>
+          </>}
 
         </>}
 
-        {import.meta.env.VITE_PUBLIC_DEMO === 'true' ? <div className="upload-panel public-demo-note">{t('publicUploadDisabled')}</div> : <details className="upload-panel">
+        </>}
+
+        {activePage === 'queues' && <section className="dataset-list page-panel">
+          <div className="section-heading"><div><h2>{t('queuePerformance')}</h2><p>{t('queuePerformanceDescription')}</p></div><span className="signal-count">{queueSummary.length} {t('queuesCount')}</span></div>
+          <div className="dataset-table-wrap"><table><thead><tr><th>{t('queue')}</th><th>{t('incoming')}</th><th>{t('resolved')}</th><th>{t('waiting')}</th><th>{t('sla')}</th></tr></thead><tbody>{queueSummary.map((item) => <tr key={item.queue}><td><strong>{queueLabels[language][item.queue] ?? item.queue}</strong></td><td>{number.format(item.received)}</td><td>{number.format(item.resolved)}</td><td>{number.format(item.backlog)}</td><td>{item.resolved ? `${decimal(item.breaches / item.resolved * 100, language, 2)}%` : t('noData')}</td></tr>)}</tbody></table></div>
+        </section>}
+
+        {activePage === 'signals' && <section className="signals-section page-panel">
+          <div className="section-heading"><div><h2>{t('signals')}</h2><p>{t('ruleDescription')}</p></div><span className="signal-count">{anomalyLoading ? t('checking') : `${anomalies.length} ${signalWord(anomalies.length, language)}`}</span></div>
+          {!anomalyLoading && anomalies.length === 0 && <div className="no-signals">{t('noSignals')}</div>}
+          {anomalies.length > 0 && <div className="signal-list">{anomalies.map((anomaly) => <article className="signal-card" key={`${anomaly.date}-${anomaly.queue}`}>
+            <div className={`signal-severity ${anomaly.severity === 'high' ? 'high' : ''}`}>{anomaly.severity === 'high' ? t('strongSpike') : t('spike')}</div>
+            <div className="signal-main"><strong>{shortDate(anomaly.date, language)} · {queueLabels[language][anomaly.queue] ?? anomaly.queue}</strong><span>{number.format(anomaly.actual_value)} {t('intake')} · {t('normalThreshold')} {number.format(anomaly.threshold_value)}</span><p>{language === 'ru' ? anomaly.explanation : `Intake was ${number.format(anomaly.actual_value)} cases — above the threshold of ${number.format(anomaly.threshold_value)} (1.5 × the median of ${number.format(anomaly.baseline_median)} across ${anomaly.baseline_days} observations in the previous 28 calendar days). This flags unusual volume; it does not establish the cause.`}</p></div>
+          </article>)}</div>}
+        </section>}
+
+        {activePage === 'reports' && <section className="report-section page-panel">
+          <div className="section-heading"><div><h2>{t('reportTitle')}</h2><p>{t('reportDescription')}</p></div><button className="primary-button" type="button" disabled={reportBusy || !metrics?.series.length} onClick={generateReport}>{reportBusy ? t('creatingReport') : t('createReport')}</button></div>
+          {reportError && <div className="alert error-alert">{appError(reportError, language)}</div>}
+          {report && <article className="report-card"><div className="report-meta">{t('templateReport')} · {shortDate(report.period_from, language)} — {shortDate(report.period_to, language)} · {report.persisted ? t('savedIn') : t('temporaryReport')}</div><p>{report.narrative}</p><small>{t('reportNoAi')}</small></article>}
+          {!report && <div className="no-signals">{t('reportsEmpty')}</div>}
+        </section>}
+
+        {activePage === 'datasets' && <>
+          <section className="dataset-list page-panel">
+            <div className="section-heading"><div><h2>{t('datasetCatalog')}</h2><p>{t('datasetCatalogDescription')}</p></div><span className="signal-count">{datasets.length} {t('datasetsCount')}</span></div>
+            <div className="dataset-table-wrap"><table><thead><tr><th>{t('dataset')}</th><th>{t('source')}</th><th>{t('rowsLabel')}</th><th>{t('coverage')}</th></tr></thead><tbody>{datasets.map((item) => <tr key={item.id}><td><strong>{datasetLabel(item, language)}</strong></td><td>{item.source_filename}</td><td>{number.format(item.row_count)}</td><td>{item.date_from ? shortDate(item.date_from, language) : '—'} — {item.date_to ? shortDate(item.date_to, language) : '—'}</td></tr>)}</tbody></table></div>
+            {import.meta.env.VITE_PUBLIC_DEMO === 'true' && <p className="data-boundary">{t('publicUploadDisabled')}</p>}
+          </section>
+          {import.meta.env.VITE_PUBLIC_DEMO === 'true' ? null : <details open className="upload-panel">
           <summary><span><strong>{datasets.length ? t('uploadOther') : t('upload')}</strong><small>{t('uploadHint')}</small></span><span className="summary-plus">+</span></summary>
           <div className="upload-content">
             <p>{t('uploadDescription')}</p>
@@ -437,10 +483,24 @@ function App() {
               </>}
             </div>}
           </div>
-        </details>}
+          </details>}
+        </>}
+
+        {activePage === 'guide' && <section className="metric-guide-page page-panel">
+          <div className="guide-intro"><span className="start-here-mark">?</span><div><strong>{t('guideIntroTitle')}</strong><p>{t('guideIntroDescription')}</p></div></div>
+          <div className="metric-definitions">
+            <article><strong>{t('waiting')}</strong><p>{t('backlogDefinition')}</p></article>
+            <article><strong>SLA</strong><p>{t('slaDefinition')}</p></article>
+            <article><strong>{t('processingPace')}</strong><p>{t('paceDefinition')}</p></article>
+            <article><strong>{t('resolutionTime')}</strong><p>{t('timeDefinition')}</p></article>
+            <article><strong>CSAT</strong><p>{t('csatGuide')}</p></article>
+          </div>
+          <div className="guide-caveat"><strong>{t('guideCaveatTitle')}</strong><p>{t('guideCaveatText')}</p></div>
+        </section>}
 
         <footer className="page-footer">OpsPilot <span>·</span> {t('footer')}</footer>
       </main>
+      </div>
     </div>
   )
 }
