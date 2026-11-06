@@ -5,7 +5,7 @@
 - **Render Free** runs the Docker app and serves the React site and FastAPI API from the same address.
 - **Neon Free** stores the seeded fictional Northstar dataset and remains available without an expiry date.
 - No LLM key is needed: report text comes from a deterministic template.
-- The public demo disables CSV preview/import and does not save generated reports. This protects the shared demo database from visitors changing its data.
+- The public demo permits stateless CSV analysis but disables persistent imports and does not save generated reports. Uploaded files are not added to the shared demo database.
 
 The trade-off is that a free Render service sleeps after 15 minutes without traffic. The first visit after sleep can take about a minute. Render's free PostgreSQL service is not selected because its free databases expire; Neon is a separate persistent free database option. Free quotas and provider terms can change.
 
@@ -29,4 +29,4 @@ From the project root, run `docker build -t opspilot .`. The hosted image defaul
 
 ## Limitations
 
-This is a portfolio demo with fictional aggregate data, not a production banking system. It has no login, user isolation, real bank connection, or LLM integration. Do not upload real customer or account data. Add authentication and tenant-level isolation before enabling public uploads.
+This is a portfolio demo with fictional aggregate data, not a production banking system. It has no login, user isolation, real bank connection, or LLM integration. CSV uploads are sent to the hosting service for temporary analysis; do not upload real customer, account, or other confidential data. Add authentication and tenant-level isolation before enabling persistent imports.
