@@ -512,6 +512,14 @@ function App() {
               {uploadAnalysis.errors?.length ? <ul className="issue-list">{uploadAnalysis.errors.map((issue, index) => <li key={`${issue.code}-${index}`}>{issue.row ? `${language === 'en' ? 'Row' : 'Строка'} ${issue.row}: ` : ''}{issueMessage(issue, language)}</li>)}</ul> : uploadAnalysis.summary && <>
                 <div className="upload-kpi-grid"><span>{t('incoming')} <strong>{number.format(uploadAnalysis.summary.cases_received)}</strong></span><span>{t('resolved')} <strong>{number.format(uploadAnalysis.summary.cases_resolved)}</strong></span><span>{t('waiting')} <strong>{number.format(uploadAnalysis.summary.backlog_end)}</strong></span><span>{t('sla')} <strong>{percent(uploadAnalysis.summary.sla_breach_rate_pct, language)}</strong></span></div>
                 <p>{t('uploadSignals').replace('{n}', String(uploadAnalysis.signal_count ?? 0))} · {t('uploadRecommendationCount').replace('{n}', String(uploadAnalysis.recommendations?.length ?? 0))}</p>
+                {!!uploadAnalysis.recommendations?.length && <div className="signal-list">{uploadAnalysis.recommendations.map((item) => {
+                  const definition = item.key === 'inflow_exceeds_resolved'
+                    ? { title: 'recBacklogTitle', evidence: t('recBacklogEvidence').replace('{n}', number.format(item.evidence)), action: 'recBacklogAction' }
+                    : item.key === 'review_sla_breaches'
+                      ? { title: 'recSlaTitle', evidence: t('recSlaEvidence').replace('{n}', number.format(item.evidence)).replace('{pct}', percent(uploadAnalysis.summary!.sla_breach_rate_pct, language)), action: 'recSlaAction' }
+                      : { title: 'recReopenedTitle', evidence: t('recReopenedEvidence').replace('{n}', number.format(item.evidence)), action: 'recReopenedAction' }
+                  return <article className="signal-card" key={item.key}><div className="signal-main"><strong>{t(definition.title)}</strong><span>{definition.evidence}</span><p>{t(definition.action)}</p></div></article>
+                })}</div>}
                 <small>{t('uploadNotSaved')}</small>
               </>}
             </div>}
