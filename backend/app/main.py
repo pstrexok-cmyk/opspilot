@@ -6,6 +6,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.api.v1.datasets import router as datasets_router
+from app.api.v1.ai import router as ai_router
 from app.database import check_database_connection
 
 
@@ -15,6 +16,7 @@ app = FastAPI(
     version="0.1.0",
 )
 app.include_router(datasets_router)
+app.include_router(ai_router)
 
 frontend_dist = Path(__file__).resolve().parents[2] / "frontend" / "dist"
 
