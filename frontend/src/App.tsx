@@ -520,7 +520,7 @@ function App() {
                       : { title: 'recReopenedTitle', evidence: t('recReopenedEvidence').replace('{n}', number.format(item.evidence)), action: 'recReopenedAction' }
                   return <article className="signal-card" key={item.key}><div className="signal-main"><strong>{t(definition.title)}</strong><span>{definition.evidence}</span><p>{t(definition.action)}</p></div></article>
                 })}</div>}
-                <small>{t('uploadNotSaved')}</small>
+                <div className="upload-not-saved"><span aria-hidden="true">i</span><p>{t('uploadNotSaved')}</p></div>
               </>}
             </div>}
           </div></details> : <details open className="upload-panel">
