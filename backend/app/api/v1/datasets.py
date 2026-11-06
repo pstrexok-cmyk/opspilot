@@ -4,6 +4,7 @@ from pathlib import Path
 from datetime import date, timedelta
 from datetime import datetime, timezone
 import os
+from types import SimpleNamespace
 from typing import Literal
 from uuid import UUID, uuid4
 
@@ -234,6 +235,48 @@ def preview_dataset(file: UploadFile = File(...)) -> DatasetPreview:
         preview_rows=validation.preview_rows,
         errors=validation.errors,
     )
+
+
+@router.post("/analyze-upload")
+def analyze_uploaded_csv(file: UploadFile = File(...)) -> dict:
+    """Analyze an uploaded CSV in memory without persisting it in the shared demo."""
+    validation = validate_csv(file.file.read(10 * 1024 * 1024 + 1), file.filename)
+    if not validation.success:
+        return {
+            "success": False,
+            "filename": validation.filename,
+            "total_rows": validation.total_rows,
+            "valid_rows": len(validation.records),
+            "date_from": validation.date_from,
+            "date_to": validation.date_to,
+            "errors": validation.errors,
+        }
+
+    rows = [SimpleNamespace(**record) for record in validation.records]
+    summary, _ = calculate_kpis(rows)
+    anomalies = detect_intake_spikes(rows)
+    recommendations = []
+    if summary["cases_received"] > summary["cases_resolved"]:
+        recommendations.append({
+            "key": "inflow_exceeds_resolved",
+            "evidence": summary["cases_received"] - summary["cases_resolved"],
+        })
+    if summary["sla_breaches"] > 0:
+        recommendations.append({"key": "review_sla_breaches", "evidence": summary["sla_breaches"]})
+    if summary["reopened_cases"] > 0:
+        recommendations.append({"key": "review_reopened_cases", "evidence": summary["reopened_cases"]})
+    return {
+        "success": True,
+        "filename": validation.filename,
+        "total_rows": validation.total_rows,
+        "valid_rows": len(validation.records),
+        "date_from": validation.date_from,
+        "date_to": validation.date_to,
+        "summary": summary,
+        "signal_count": len(anomalies),
+        "recommendations": recommendations,
+        "persistence": "not_saved",
+    }
 
 
 @router.post("", response_model=DatasetImport, status_code=201)
