@@ -23,6 +23,8 @@ The interface opens in English. Use the **EN / RU** control in the top bar to sw
 
 For developer/API inspection, open `http://127.0.0.1:8000/docs`. `POST /api/v1/datasets/analyze-upload` validates and analyzes a CSV in memory without saving it. In local mode, `POST /api/v1/datasets/preview` checks a file and `POST /api/v1/datasets` imports it; `GET /api/v1/datasets` lists saved datasets, and `GET /api/v1/datasets/{id}/metrics` returns the KPI summary and daily series.
 
+The public upload result also offers an optional AI interpretation at `POST /api/v1/ai/analyze-upload`. It sends aggregate KPIs only to OpenAI's Responses API; the feature is disabled until `OPENAI_API_KEY` is configured on the server. The public demo allows 500 AI requests per UTC month, with a 600-token output ceiling. Configure a separate enforced $1 monthly spend cap in the OpenAI API project before enabling the key. AI explains calculated indicators; it does not calculate KPIs or establish causes.
+
 The SLA breach percentage is `SLA breaches / resolved cases`. Throughput-to-intake is `resolved cases / incoming cases`; it compares flows, not the same cohort of cases. Average resolution time is weighted by resolved volume. The daily CSAT average is currently unweighted because the sample does not include survey counts.
 
 Daily intake spikes are flagged when intake exceeds 1.5 times the median of available observations in the previous 28 calendar days; at least 14 observations are required. A stronger label means the actual value is at least twice the baseline median. The signal identifies unusual volume, not its cause. Management reports use a deterministic template built from calculated KPI and anomaly counts, so no LLM key or usage cost is required.
